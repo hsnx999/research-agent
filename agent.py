@@ -9,20 +9,34 @@ from src.agent_builder import build_agent
 
 class LiveThoughtHandler(BaseCallbackHandler):
     def on_agent_action(self, action, **kwargs):
-        print(f"\n🔧 Tool: {action.tool}")
-        print(f"📥 Input: {action.tool_input}")
+        try:
+            print(f"\n🔧 Tool: {action.tool}")
+            print(f"📥 Input: {action.tool_input}")
+        except Exception as e:
+            print(f"⚠️  Warning: on_agent_action callback failed: {e}", file=sys.stderr)
 
     def on_tool_end(self, output, **kwargs):
-        preview = str(output)[:200]
-        print(f"📤 Result: {preview}{'...' if len(str(output)) > 200 else ''}")
+        try:
+            preview = str(output)[:200]
+            print(f"📤 Result: {preview}{'...' if len(str(output)) > 200 else ''}")
+        except Exception as e:
+            print(f"⚠️  Warning: on_tool_end callback failed: {e}", file=sys.stderr)
 
     def on_agent_finish(self, finish, **kwargs):
-        print("\n✅ Agent finished")
+        try:
+            print("\n✅ Agent finished")
+        except Exception as e:
+            print(f"⚠️  Warning: on_agent_finish callback failed: {e}", file=sys.stderr)
 
 
 def run(task: str) -> str:
+    stripped = task.strip()
+    if not stripped:
+        raise ValueError("Task cannot be empty.")
+    if len(stripped) > 10000:
+        raise ValueError("Task is too long (max 10,000 characters).")
     executor = build_agent(callbacks=[LiveThoughtHandler()])
-    result = executor.invoke({"input": task})
+    result = executor.invoke({"input": stripped})
     return result["output"]
 
 
