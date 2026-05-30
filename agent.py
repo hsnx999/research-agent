@@ -69,8 +69,50 @@ def list_reports() -> None:
     print(f"\nTotal: {len(files)} report(s)")
 
 
+def run_interactive():
+    """Interactive REPL loop with in-memory conversation history."""
+    print("Research Agent — interactive mode. Type 'exit' or 'quit' to stop.")
+    history = []  # list of (role, message) tuples
+
+    while True:
+        try:
+            task = input("\nResearch task: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nGoodbye!")
+            break
+
+        if not task:
+            continue
+        if task.lower() in ("exit", "quit"):
+            print("Goodbye!")
+            break
+
+        # Build context from recent history (last 5 exchanges)
+        context = ""
+        if history:
+            context = "Previous conversation:\n"
+            for role, msg in history[-5:]:
+                context += f"{role}: {msg}\n"
+            context += "\n"
+
+        full_task = context + task
+
+        print("\n" + "=" * 55)
+        try:
+            answer = run(full_task)
+            print("=" * 55)
+            print("Final Answer:")
+            print(answer)
+            history.append(("User", task))
+            history.append(("Assistant", answer[:500]))
+        except Exception as e:
+            print(f"\nError: {e}")
+
+
 def run_cli() -> None:
-    parser = argparse.ArgumentParser(description="Research Agent")
+    parser = argparse.ArgumentParser(
+        description="Research Agent — single-task execution or interactive multi-turn mode"
+    )
     parser.add_argument(
         "task",
         nargs="?",
@@ -82,7 +124,17 @@ def run_cli() -> None:
         action="store_true",
         help="List all saved reports",
     )
+    parser.add_argument(
+        "-i",
+        "--interactive",
+        action="store_true",
+        help="Interactive multi-turn mode",
+    )
     args = parser.parse_args()
+
+    if args.interactive:
+        run_interactive()
+        return
 
     if args.list_reports:
         list_reports()

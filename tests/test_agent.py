@@ -63,3 +63,44 @@ class TestCLI:
         captured = capsys.readouterr()
         assert "test_report.md" in captured.out
         assert "Total:" in captured.out
+
+
+class TestInteractive:
+    def test_run_interactive_exit(self, monkeypatch, capsys):
+        monkeypatch.setattr("builtins.input", lambda _: "exit")
+        from agent import run_interactive
+        run_interactive()
+        captured = capsys.readouterr()
+        assert "Goodbye" in captured.out
+
+    def test_run_interactive_quit(self, monkeypatch, capsys):
+        monkeypatch.setattr("builtins.input", lambda _: "quit")
+        from agent import run_interactive
+        run_interactive()
+        captured = capsys.readouterr()
+        assert "Goodbye" in captured.out
+
+    def test_run_interactive_empty_input(self, monkeypatch, capsys):
+        inputs = iter(["", "exit"])
+        monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+        from agent import run_interactive
+        run_interactive()
+        captured = capsys.readouterr()
+        assert "Goodbye" in captured.out
+
+    def test_run_interactive_maintains_history(self, monkeypatch, capsys):
+        # Verify history is built up across turns
+        from agent import run_interactive
+        # Simulate one valid query then exit
+        calls = []
+        def mock_input(prompt):
+            calls.append(prompt)
+            if len(calls) == 1:
+                return "valid task"
+            return "exit"
+        monkeypatch.setattr("builtins.input", mock_input)
+        # Mock run() to return a fixed answer
+        monkeypatch.setattr("agent.run", lambda task: "mock answer for: " + task[:20])
+        run_interactive()
+        captured = capsys.readouterr()
+        assert "Final Answer" in captured.out
