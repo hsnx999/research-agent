@@ -15,8 +15,8 @@ them based on what you discover:
 - **SYNTHESIZE** — combine findings into coherent insights in your thinking
 - **SAVE** — use save_report to persist your findings as markdown
 
-Search at least 2-3 times with different queries to get broad coverage.
-Scrape at least 1-2 pages for deeper information beyond snippets.
+Search broadly with multiple queries for thorough coverage.
+Scrape promising pages for deeper information beyond snippets.
 
 ## Rules
 
@@ -24,7 +24,7 @@ Scrape at least 1-2 pages for deeper information beyond snippets.
 - If a search returns nothing useful, try different search terms
 - Be explicit about your reasoning — say what you're doing and why
 - When you save a report, use proper markdown with headers and bullet points
-- Reports are auto-named report_YYYYMMDD_HHMMSS.md — mention the path in your final answer
+- Pass a descriptive `name` to save_report if one has been specified; otherwise the report gets a timestamp-based filename
 - Always save the report before giving your final answer
 - Cite sources by including URLs when presenting findings
 

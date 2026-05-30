@@ -1,4 +1,5 @@
 import argparse
+import re
 import sys
 import threading
 from datetime import datetime
@@ -47,7 +48,7 @@ def _spin(stop_event, message="Thinking"):
     sys.stdout.flush()
 
 
-def run(task: str) -> str:
+def run(task: str, instructions="", report_name="", max_iterations=15) -> str:
     stripped = task.strip()
     if not stripped:
         raise ValueError("Task cannot be empty.")
@@ -59,7 +60,12 @@ def run(task: str) -> str:
     spinner.start()
 
     try:
-        executor = build_agent(callbacks=[LiveThoughtHandler()])
+        executor = build_agent(
+            callbacks=[LiveThoughtHandler()],
+            instructions=instructions,
+            report_name=report_name,
+            max_iterations=max_iterations,
+        )
         result = executor.invoke({"input": stripped})
         return result["output"]
     finally:
@@ -134,18 +140,27 @@ def run_interactive():
 
 def run_cli() -> None:
     parser = argparse.ArgumentParser(
-        description="Research Agent — single-task execution or interactive multi-turn mode"
+        description="Research Agent — autonomous web research"
     )
     parser.add_argument(
         "task",
         nargs="?",
-        default=None,
         help="Research task to execute",
     )
     parser.add_argument(
         "--list-reports",
         action="store_true",
-        help="List all saved reports",
+        help="List saved reports",
+    )
+    parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="Quick mode — 1 search, 1 scrape max",
+    )
+    parser.add_argument(
+        "--deep",
+        action="store_true",
+        help="Deep mode — 5+ searches, 3+ scrapes",
     )
     parser.add_argument(
         "-i",
@@ -153,24 +168,57 @@ def run_cli() -> None:
         action="store_true",
         help="Interactive multi-turn mode",
     )
+    parser.add_argument(
+        "--name",
+        type=str,
+        help="Custom name for the saved report",
+    )
     args = parser.parse_args()
-
-    if args.interactive:
-        run_interactive()
-        return
 
     if args.list_reports:
         list_reports()
         return
 
+    if args.interactive:
+        # Interactive mode ignores --name since it spans multiple queries
+        run_interactive()
+        return
+
+    # Determine depth instructions
+    instructions = ""
+    if args.quick:
+        instructions = "Be brief — limit to 1 search and 1 scrape maximum. Keep responses concise."
+    elif args.deep:
+        instructions = "Be thorough — search at least 5 times and scrape at least 3 pages. Take your time to get comprehensive coverage."
+
+    # Determine max iterations based on depth
+    max_iter = 10 if args.quick else 30 if args.deep else 15
+
+    # Slugify report name
+    report_name = ""
+    if args.name:
+        report_name = re.sub(r'[^a-z0-9]+', '-', args.name.lower()).strip('-')
+
     task = args.task or "Search for the latest developments in AI agents and summarize the top 3 findings. Save a report of your findings."
     print(f"Task: {task}\n")
+    if instructions:
+        print(f"Mode: {'Quick' if args.quick else 'Deep'}")
+    if report_name:
+        print(f"Report name: {report_name}")
     print("=" * 55)
+
     try:
-        answer = run(task)
+        executor = build_agent(
+            callbacks=[LiveThoughtHandler()],
+            instructions=instructions,
+            report_name=report_name,
+            max_iterations=max_iter,
+        )
+
+        result = executor.invoke({"input": task})
         print("\n" + "=" * 55)
         print("Final Answer:")
-        print(answer)
+        print(result["output"])
     except Exception as e:
         print(f"\nError: {e}")
         sys.exit(1)

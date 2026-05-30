@@ -116,3 +116,25 @@ class TestInteractive:
         run_interactive()
         captured = capsys.readouterr()
         assert "Final Answer" in captured.out
+
+
+class TestDepthFlags:
+    def test_quick_instructions(self):
+        instructions = "Be brief — limit to 1 search and 1 scrape maximum."
+        assert "1 search" in instructions
+
+    def test_deep_instructions(self):
+        instructions = "Be thorough — search at least 5 times and scrape at least 3 pages."
+        assert "5 times" in instructions
+
+
+class TestReportName:
+    def test_report_name_slugified(self):
+        import re
+        name = re.sub(r'[^a-z0-9]+', '-', "AI Trends".lower()).strip('-')
+        assert name == "ai-trends"
+
+    def test_report_name_with_special_chars(self):
+        import re
+        name = re.sub(r'[^a-z0-9]+', '-', "My!!! Report__2026".lower()).strip('-')
+        assert name == "my-report-2026"

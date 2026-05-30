@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 
 from langchain import hub
@@ -37,10 +38,11 @@ def _get_base_prompt():
         return PromptTemplate.from_template(_FALLBACK_PROMPT)
 
 
-def build_agent(callbacks=None) -> AgentExecutor:
+def build_agent(callbacks=None, instructions="", report_name="", max_iterations: int = 15) -> AgentExecutor:
+    model = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
     try:
         llm = ChatGroq(
-            model="llama-3.3-70b-versatile",
+            model=model,
             temperature=0.0,
             max_tokens=4096,
         )
@@ -51,6 +53,19 @@ def build_agent(callbacks=None) -> AgentExecutor:
 
     base = _get_base_prompt()
     combined = SYSTEM_PROMPT + "\n\n" + base.template
+
+    # Prepend depth/behaviour instructions and report name guidance
+    extra = ""
+    if instructions:
+        extra += instructions + "\n\n"
+    if report_name:
+        extra += (
+        f"Use the name '{report_name}' when saving the report. "
+        f"Call save_report with name='{report_name}' so the file is named correctly.\n\n"
+        )
+    if extra:
+        combined = extra + combined
+
     prompt = PromptTemplate.from_template(combined)
 
     agent = create_react_agent(llm=llm, tools=TOOLS, prompt=prompt)
@@ -59,7 +74,7 @@ def build_agent(callbacks=None) -> AgentExecutor:
         agent=agent,
         tools=TOOLS,
         verbose=False,
-        max_iterations=15,
+        max_iterations=max_iterations,
         handle_parsing_errors=True,
         callbacks=callbacks or [],
     )
