@@ -42,18 +42,19 @@ Example run:
 
 ## Tech stack
 
-    Library       Role
-    LangChain     ReAct agent framework and tool orchestration
-    Groq           LLaMA 3.3 70B inference — fast and free
-    Tavily        Web search API designed for AI agents
-    BeautifulSoup HTML parsing and content extraction
-    Streamlit     Live UI showing agent thought process
+    Library         Role
+    LangChain       ReAct agent framework and tool orchestration
+    Groq            LLaMA 3.3 70B inference — fast and free
+    Tavily          Web search API designed for AI agents
+    LangChain Hub   ReAct prompt template hosting
+    BeautifulSoup   HTML parsing and content extraction
+    Streamlit       Live UI showing agent thought process
 
 ---
 
 ## Run it locally
 
-Prerequisites: Python 3.10+, free API keys from groq.com and tavily.com
+Prerequisites: Python 3.12+, free API keys from groq.com and tavily.com
 
     git clone https://github.com/hsnx999/research-agent.git
     cd research-agent
@@ -65,7 +66,6 @@ Create a .env file:
 
     GROQ_API_KEY=your_groq_key
     TAVILY_API_KEY=your_tavily_key
-    LANGCHAIN_TRACING_V2=false
 
 Run the terminal agent:
 
@@ -80,12 +80,14 @@ Run the Streamlit UI:
 ## Project structure
 
     research-agent/
-    ├── agent.py          Terminal entry point with live thought printing
-    ├── app.py            Streamlit UI with streaming thought process
+    ├── agent.py               Terminal entry point with live thought printing
+    ├── app.py                 Streamlit UI with streaming thought process
     ├── src/
-    │   ├── tools.py      All agent tools — search, scrape, save, calculate
-    │   └── prompts.py    Agent system prompt and behaviour rules
-    ├── reports/          Saved research reports (git-ignored)
+    │   ├── __init__.py        Package init
+    │   ├── agent_builder.py   Shared agent builder (LLM, prompt, executor)
+    │   ├── tools.py           All agent tools — search, scrape, save, calculate
+    │   └── prompts.py         Agent system prompt and behaviour rules
+    ├── reports/               Saved research reports (git-ignored)
     └── requirements.txt
 
 ---

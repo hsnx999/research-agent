@@ -1,6 +1,16 @@
 .env
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
 .venv/
 reports/
 .DS_Store
+.pytest_cache/
+.streamlit/
+
+# OpenCode project config (personal)
+.opencode/
+AGENTS.md
