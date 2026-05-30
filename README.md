@@ -29,6 +29,12 @@ Example run:
     Action:  save_report("# Open Source LLMs...")
     Final Answer: Here are the key findings...
 
+The CLI is built with `argparse` and supports three modes:
+
+    python agent.py                    # run the default research task
+    python agent.py "your query"       # run a custom research task
+    python agent.py --list-reports     # list all saved markdown reports
+
 ---
 
 ## Tools
@@ -68,7 +74,9 @@ Create a .env file:
 
 Run the terminal agent:
 
-    python agent.py
+    python agent.py                          # default task
+    python agent.py "your research query"    # custom task
+    python agent.py --list-reports           # list saved reports
 
 Run the Streamlit UI:
 
