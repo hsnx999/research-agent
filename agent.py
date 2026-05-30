@@ -1,5 +1,6 @@
 import argparse
 import sys
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -33,15 +34,37 @@ class LiveThoughtHandler(BaseCallbackHandler):
             print(f"⚠️  Warning: on_agent_finish callback failed: {e}", file=sys.stderr)
 
 
+def _spin(stop_event, message="Thinking"):
+    """Print a spinner animation until stop_event is set."""
+    chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+    i = 0
+    while not stop_event.is_set():
+        sys.stdout.write(f"\r{chars[i % len(chars)]} {message}...")
+        sys.stdout.flush()
+        i += 1
+        stop_event.wait(0.1)
+    sys.stdout.write("\r" + " " * 40 + "\r")
+    sys.stdout.flush()
+
+
 def run(task: str) -> str:
     stripped = task.strip()
     if not stripped:
         raise ValueError("Task cannot be empty.")
     if len(stripped) > 10000:
         raise ValueError("Task is too long (max 10,000 characters).")
-    executor = build_agent(callbacks=[LiveThoughtHandler()])
-    result = executor.invoke({"input": stripped})
-    return result["output"]
+
+    stop_event = threading.Event()
+    spinner = threading.Thread(target=_spin, args=(stop_event,), daemon=True)
+    spinner.start()
+
+    try:
+        executor = build_agent(callbacks=[LiveThoughtHandler()])
+        result = executor.invoke({"input": stripped})
+        return result["output"]
+    finally:
+        stop_event.set()
+        spinner.join()
 
 
 def list_reports() -> None:

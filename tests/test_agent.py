@@ -1,4 +1,5 @@
 """Tests for input validation, callback safety, and CLI."""
+import threading
 from pathlib import Path
 
 import pytest
@@ -43,6 +44,17 @@ class TestCallbackSafety:
         handler.on_agent_finish(None)  # No operations on finish, no crash
         captured = capsys.readouterr()
         assert "Agent finished" in captured.out
+
+
+class TestSpinner:
+    def test_spinner_stops_on_completion(self):
+        from agent import _spin
+        stop = threading.Event()
+        t = threading.Thread(target=_spin, args=(stop,), daemon=True)
+        t.start()
+        stop.set()
+        t.join(timeout=1)
+        assert not t.is_alive()
 
 
 class TestCLI:
