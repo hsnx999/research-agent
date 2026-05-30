@@ -5,7 +5,7 @@ import requests
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
-from uuid import uuid4
+
 
 from langchain.tools import tool
 from tavily import TavilyClient
@@ -113,19 +113,27 @@ def scrape_page(url: str) -> str:
 
 
 @tool
-def save_report(content: str) -> str:
+def save_report(content: str, name: str = None) -> str:
     """Save a research report to a markdown file in the reports/ folder.
     Use this as the final step when you have finished researching
     and want to persist the findings. The content should be a
     well-structured markdown document with headers and sections.
-    Files are auto-named as report_YYYYMMDD_HHMMSS_XXXXXX.md
-    where XXXXXX is a random hex suffix to prevent overwrites.
+
+    Optionally pass a descriptive `name` to give the file a custom name
+    instead of using just an auto-generated timestamp. The name will be
+    slugified for the filesystem (e.g. 'AI Trends' becomes 'ai-trends').
+
+    Files are named: report_{slug}_{timestamp}.md when a name is given,
+    or report_{timestamp}.md when no name is given.
     Returns the file path where the report was saved."""
     try:
         Path("reports").mkdir(exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        suffix = uuid4().hex[:6]
-        filepath = f"reports/report_{timestamp}_{suffix}.md"
+        if name:
+            slug = re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
+            filepath = f"reports/report_{slug}_{timestamp}.md"
+        else:
+            filepath = f"reports/report_{timestamp}.md"
         Path(filepath).write_text(content, encoding="utf-8")
         return f"Report saved to {filepath}"
     except Exception as e:

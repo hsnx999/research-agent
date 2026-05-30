@@ -90,15 +90,31 @@ class TestSaveReport:
         assert Path(filepath).read_text(encoding="utf-8") == ""
 
     def test_save_report_unique_filenames(self, tmp_reports_dir):
-        """Two saves in the same second must produce different filenames."""
-        path1 = save_report("content1")
-        path2 = save_report("content2")
+        """Two saves with different names must produce different filenames."""
+        path1 = save_report.invoke({"content": "content1", "name": "first"})
+        path2 = save_report.invoke({"content": "content2", "name": "second"})
         assert path1 != path2, f"Filenames must differ, got {path1!r} and {path2!r}"
         # Verify both files actually exist with the right content
         file1 = path1.replace("Report saved to ", "")
         file2 = path2.replace("Report saved to ", "")
         assert Path(file1).read_text(encoding="utf-8") == "content1"
         assert Path(file2).read_text(encoding="utf-8") == "content2"
+
+    def test_save_report_with_name(self, tmp_reports_dir):
+        """Passing a name should include the slugified name in the path."""
+        result = save_report.invoke({"content": "# Test", "name": "AI Trends"})
+        assert "ai-trends" in result
+        assert result.startswith("Report saved to")
+
+    def test_save_report_with_name_slugified(self, tmp_reports_dir):
+        """Name should be slugified (lowercased, non-alphanumeric -> hyphens)."""
+        result = save_report.invoke({"content": "# Test", "name": "  My  Report!!!  "})
+        assert "my-report" in result
+
+    def test_save_report_without_name_falls_back(self, tmp_reports_dir):
+        """Without a name, the filename starts with report_<timestamp>."""
+        result = save_report("# Test")
+        assert result.startswith("Report saved to reports/report_2")
 
 
 # ── calculate ───────────────────────────────────────────────────────────────
