@@ -1,3 +1,4 @@
+import sys
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -21,15 +22,22 @@ class LiveThoughtHandler(BaseCallbackHandler):
 
 def run(task: str) -> str:
     executor = build_agent(callbacks=[LiveThoughtHandler()])
-    result = executor.invoke({"input": task})
-    return result["output"]
+    try:
+        result = executor.invoke({"input": task})
+        return result["output"]
+    except Exception as e:
+        return f"Agent execution failed: {e}"
 
 
 if __name__ == "__main__":
     task = "Search for the latest developments in AI agents and summarize the top 3 findings. Save a report of your findings."
     print(f"Task: {task}\n")
     print("=" * 55)
-    answer = run(task)
-    print("\n" + "=" * 55)
-    print("Final Answer:")
-    print(answer)
+    try:
+        answer = run(task)
+        print("\n" + "=" * 55)
+        print("Final Answer:")
+        print(answer)
+    except Exception as e:
+        print(f"\nError: {e}")
+        sys.exit(1)

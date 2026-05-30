@@ -7,6 +7,8 @@ from langchain_core.callbacks import BaseCallbackHandler
 
 from src.agent_builder import build_agent
 
+REPORTS_DIR = Path(__file__).parent / "reports"
+
 
 class StreamlitCallbackHandler(BaseCallbackHandler):
     def __init__(self, thought_container):
@@ -50,11 +52,17 @@ with st.sidebar:
 
     st.divider()
     st.header("Saved reports")
-    reports = sorted(Path("reports").glob("*.md"), reverse=True)
-    if reports:
-        for r in reports[:5]:
-            with st.expander(r.name):
-                st.markdown(r.read_text())
+    if REPORTS_DIR.exists():
+        reports = sorted(REPORTS_DIR.glob("*.md"), reverse=True)
+        if reports:
+            for r in reports[:5]:
+                with st.expander(r.name):
+                    try:
+                        st.markdown(r.read_text(encoding="utf-8"))
+                    except Exception:
+                        st.caption("Could not read report.")
+        else:
+            st.caption("No reports saved yet.")
     else:
         st.caption("No reports saved yet.")
 
@@ -66,17 +74,22 @@ task = st.text_area(
 )
 
 if st.button("Run agent", type="primary", disabled=not task.strip()):
-    st.divider()
+    output_placeholder = st.empty()
 
-    with st.expander("Agent thought process", expanded=True):
-        thought_container = st.empty()
+    with output_placeholder.container():
+        st.divider()
 
-    handler  = StreamlitCallbackHandler(thought_container)
-    executor = build_agent(callbacks=[handler])
+        with st.expander("Agent thought process", expanded=True):
+            thought_container = st.empty()
 
-    with st.spinner("Agent is working..."):
-        result = executor.invoke({"input": task})
+        handler  = StreamlitCallbackHandler(thought_container)
 
-    st.divider()
-    st.subheader("Final answer")
-    st.markdown(result["output"])
+        with st.spinner("Agent is working..."):
+            try:
+                executor = build_agent(callbacks=[handler])
+                result = executor.invoke({"input": task})
+                st.divider()
+                st.subheader("Final answer")
+                st.markdown(result["output"])
+            except Exception as e:
+                st.error(f"Agent execution failed: {e}")
