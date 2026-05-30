@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "research-agent"
+version = "0.1.0"
+description = "Autonomous AI agent that researches topics via web search and saves structured reports"
+authors = [{name = "hsnx999"}]
+requires-python = ">=3.12"
+dependencies = [
+    "langchain>=0.3",
+    "langchain-community>=0.3",
+    "langchain-groq>=0.2",
+    "langchain-core>=0.3",
+    "streamlit>=1.41",
+    "python-dotenv>=1.0",
+    "requests>=2.32",
+    "beautifulsoup4>=4.12",
+    "tavily-python>=0.5",
+    "pytest>=8",
+]
+
+[project.scripts]
+research-agent = "agent:run_cli"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
