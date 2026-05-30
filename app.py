@@ -53,12 +53,19 @@ with st.sidebar:
     st.divider()
     st.header("Saved reports")
     if REPORTS_DIR.exists():
-        reports = sorted(REPORTS_DIR.glob("*.md"), reverse=True)
+        reports = sorted(REPORTS_DIR.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
         if reports:
             for r in reports[:5]:
                 with st.expander(r.name):
                     try:
-                        st.markdown(r.read_text(encoding="utf-8"))
+                        MAX_REPORT_BYTES = 10 * 1024 * 1024
+                        size = r.stat().st_size
+                        if size > MAX_REPORT_BYTES:
+                            st.caption(
+                                f"Report too large ({size / 1024 / 1024:.1f} MB) to display."
+                            )
+                        else:
+                            st.markdown(r.read_text(encoding="utf-8"))
                     except Exception:
                         st.caption("Could not read report.")
         else:
@@ -92,4 +99,5 @@ if st.button("Run agent", type="primary", disabled=not task.strip()):
                 st.subheader("Final answer")
                 st.markdown(result["output"])
             except Exception as e:
+                thought_container.markdown("")  # clear partial thoughts
                 st.error(f"Agent execution failed: {e}")
