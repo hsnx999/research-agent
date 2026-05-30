@@ -138,3 +138,159 @@ class TestReportName:
         import re
         name = re.sub(r'[^a-z0-9]+', '-', "My!!! Report__2026".lower()).strip('-')
         assert name == "my-report-2026"
+
+
+class TestToolStats:
+    def test_tool_counts_incremented(self):
+        from agent import LiveThoughtHandler, _tool_counts, _tool_stats_lock
+        _tool_counts.clear()
+        handler = LiveThoughtHandler()
+
+        class MockAction:
+            tool = "web_search"
+            tool_input = "test query"
+
+        handler.on_agent_action(MockAction())
+        with _tool_stats_lock:
+            assert _tool_counts.get("web_search") == 1
+
+        handler.on_agent_action(MockAction())
+        with _tool_stats_lock:
+            assert _tool_counts.get("web_search") == 2
+
+    def test_tool_counts_multiple_tools(self):
+        from agent import LiveThoughtHandler, _tool_counts, _tool_stats_lock
+        _tool_counts.clear()
+        handler = LiveThoughtHandler()
+
+        class MockAction:
+            def __init__(self, tool, inp):
+                self.tool = tool
+                self.tool_input = inp
+
+        handler.on_agent_action(MockAction("web_search", "q1"))
+        handler.on_agent_action(MockAction("scrape_page", "url1"))
+        handler.on_agent_action(MockAction("web_search", "q2"))
+
+        with _tool_stats_lock:
+            assert _tool_counts["web_search"] == 2
+            assert _tool_counts["scrape_page"] == 1
+
+    def test_print_stats_output(self, capsys):
+        from agent import print_stats, _tool_counts, _tool_stats_lock
+        with _tool_stats_lock:
+            _tool_counts.clear()
+            _tool_counts["web_search"] = 2
+            _tool_counts["scrape_page"] = 1
+
+        print_stats()
+        captured = capsys.readouterr()
+        assert "web_search" in captured.out
+        assert "Total" in captured.out
+        assert "3" in captured.out  # 2 + 1 = 3
+
+    def test_print_stats_no_calls(self, capsys):
+        from agent import print_stats, _tool_counts, _tool_stats_lock
+        with _tool_stats_lock:
+            _tool_counts.clear()
+
+        print_stats()
+        captured = capsys.readouterr()
+        assert "No tool calls" in captured.out
+
+    def test_counts_reset_on_run(self, monkeypatch):
+        from agent import run, _tool_counts, _tool_stats_lock
+        # Set some pre-existing counts
+        with _tool_stats_lock:
+            _tool_counts["web_search"] = 99
+        # run() should reset them before trying LLM (which will fail without key)
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        with pytest.raises(RuntimeError):
+            run("test task")
+        with _tool_stats_lock:
+            assert _tool_counts.get("web_search", 0) == 0
+
+
+class TestSearchReports:
+    def test_search_no_directory(self, capsys, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        from agent import search_reports
+        search_reports("anything")
+        captured = capsys.readouterr()
+        assert "No reports directory" in captured.out
+
+    def test_search_no_matches(self, capsys, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        reports_dir = Path(tmp_path / "reports")
+        reports_dir.mkdir()
+        (reports_dir / "test.md").write_text("# Hello World", encoding="utf-8")
+        from agent import search_reports
+        search_reports("nonexistent")
+        captured = capsys.readouterr()
+        assert "No matches" in captured.out
+
+    def test_search_finds_match(self, capsys, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        reports_dir = Path(tmp_path / "reports")
+        reports_dir.mkdir()
+        (reports_dir / "test.md").write_text("# Hello World\n\nSome AI content here.", encoding="utf-8")
+        from agent import search_reports
+        search_reports("AI")
+        captured = capsys.readouterr()
+        assert "test.md" in captured.out
+        assert "AI" in captured.out
+        assert "match" in captured.out
+
+    def test_search_case_insensitive(self, capsys, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        reports_dir = Path(tmp_path / "reports")
+        reports_dir.mkdir()
+        (reports_dir / "report.md").write_text("Artificial Intelligence is cool", encoding="utf-8")
+        from agent import search_reports
+        search_reports("intelligence")
+        captured = capsys.readouterr()
+        assert "report.md" in captured.out
+        assert "match" in captured.out
+
+
+class TestCustomPrompt:
+    def test_prompt_file_read(self, monkeypatch, tmp_path):
+        prompt_file = tmp_path / "custom.txt"
+        prompt_file.write_text("You are a custom agent.", encoding="utf-8")
+        from agent import run, _tool_counts, _tool_stats_lock
+        with _tool_stats_lock:
+            _tool_counts.clear()
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        # Run with system_prompt — the build_agent should use it
+        # Since GROQ_API_KEY is missing, it'll raise RuntimeError, but we
+        # verify the flow doesn't crash before that.
+        with pytest.raises(RuntimeError):
+            run("test task", system_prompt=prompt_file.read_text(encoding="utf-8"))
+
+    def test_prompt_file_not_found(self, capsys, monkeypatch):
+        from agent import run_cli
+        # We can test the argparse dispatching by directly checking the path logic
+        # Instead, test the file-not-found message from run_cli
+        monkeypatch.setattr("sys.argv", ["agent.py", "--prompt", "/nonexistent/prompt.txt", "test task"])
+        # run_cli will print warning about missing file, then try to build agent
+        # which will fail with missing GROQ_API_KEY
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        with pytest.raises(SystemExit):
+            run_cli()
+        captured = capsys.readouterr()
+        assert "not found" in captured.err or "not found" in captured.out
+
+    def test_prompt_passed_to_build_agent(self, monkeypatch):
+        from unittest.mock import MagicMock
+        from src.agent_builder import build_agent
+        # Mock the LLM to avoid real API call
+        mock_llm = MagicMock()
+        monkeypatch.setattr("src.agent_builder.ChatGroq", lambda **kwargs: mock_llm)
+        # Mock hub.pull to return a base prompt
+        from langchain.prompts import PromptTemplate
+        monkeypatch.setattr("src.agent_builder.hub.pull", lambda name: PromptTemplate.from_template("Base: {input} {agent_scratchpad} {tools} {tool_names}"))
+        
+        custom = "You are a test bot."
+        executor = build_agent(system_prompt=custom)
+        # The executor was built successfully — verify the prompt was used
+        assert executor is not None

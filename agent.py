@@ -12,12 +12,18 @@ from langchain_core.callbacks import BaseCallbackHandler
 
 from src.agent_builder import build_agent
 
+_tool_counts = {}
+_tool_stats_lock = threading.Lock()
+
 
 class LiveThoughtHandler(BaseCallbackHandler):
     def on_agent_action(self, action, **kwargs):
         try:
-            print(f"\n🔧 Tool: {action.tool}")
+            tool_name = action.tool
+            print(f"\n🔧 Tool: {tool_name}")
             print(f"📥 Input: {action.tool_input}")
+            with _tool_stats_lock:
+                _tool_counts[tool_name] = _tool_counts.get(tool_name, 0) + 1
         except Exception as e:
             print(f"⚠️  Warning: on_agent_action callback failed: {e}", file=sys.stderr)
 
@@ -48,12 +54,15 @@ def _spin(stop_event, message="Thinking"):
     sys.stdout.flush()
 
 
-def run(task: str, instructions="", report_name="", max_iterations=15) -> str:
+def run(task: str, instructions="", report_name="", max_iterations=15, system_prompt=None) -> str:
     stripped = task.strip()
     if not stripped:
         raise ValueError("Task cannot be empty.")
     if len(stripped) > 10000:
         raise ValueError("Task is too long (max 10,000 characters).")
+
+    with _tool_stats_lock:
+        _tool_counts.clear()
 
     stop_event = threading.Event()
     spinner = threading.Thread(target=_spin, args=(stop_event,), daemon=True)
@@ -65,6 +74,7 @@ def run(task: str, instructions="", report_name="", max_iterations=15) -> str:
             instructions=instructions,
             report_name=report_name,
             max_iterations=max_iterations,
+            system_prompt=system_prompt,
         )
         result = executor.invoke({"input": stripped})
         return result["output"]
@@ -96,6 +106,50 @@ def list_reports() -> None:
         mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
         print(f"{f.name:<50} {size:>8} {mtime:<20}")
     print(f"\nTotal: {len(files)} report(s)")
+
+
+def print_stats() -> None:
+    """Print tool call statistics."""
+    with _tool_stats_lock:
+        if not _tool_counts:
+            print("\n📊 No tool calls were made.")
+            return
+        print(f"\n{'📊 Tool Call Stats':=^50}")
+        for tool, count in sorted(_tool_counts.items()):
+            print(f"  {tool:<25} {count:>3} call(s)")
+        print(f"  {'─' * 33}")
+        print(f"  {'Total':<25} {sum(_tool_counts.values()):>3} call(s)")
+
+
+def search_reports(keyword: str) -> None:
+    """Search report contents for a keyword (case-insensitive)."""
+    reports_dir = Path("reports")
+    if not reports_dir.is_dir():
+        print("No reports directory found.")
+        return
+
+    files = sorted(reports_dir.glob("*.md"), key=lambda f: f.stat().st_mtime, reverse=True)
+    if not files:
+        print("No reports found.")
+        return
+
+    matches = []
+    for f in files:
+        text = f.read_text(encoding="utf-8")
+        for i, line in enumerate(text.splitlines(), 1):
+            if keyword.lower() in line.lower():
+                matches.append((f.name, i, line.strip()))
+
+    if not matches:
+        print(f'No matches found for "{keyword}".')
+        return
+
+    print(f'\nSearch results for "{keyword}":\n')
+    for name, lineno, line in matches:
+        display = line[:200]
+        print(f"  {name}:{lineno}: {display}")
+    unique_files = len(set(m[0] for m in matches))
+    print(f"\n{len(matches)} match(es) in {unique_files} file(s)")
 
 
 def run_interactive():
@@ -173,10 +227,29 @@ def run_cli() -> None:
         type=str,
         help="Custom name for the saved report",
     )
+    parser.add_argument(
+        "--stats",
+        action="store_true",
+        help="Show tool call statistics after execution",
+    )
+    parser.add_argument(
+        "--search",
+        type=str,
+        help="Search reports for a keyword",
+    )
+    parser.add_argument(
+        "--prompt",
+        type=str,
+        help="Path to a custom prompt file (replaces SYSTEM_PROMPT)",
+    )
     args = parser.parse_args()
 
     if args.list_reports:
         list_reports()
+        return
+
+    if args.search:
+        search_reports(args.search)
         return
 
     if args.interactive:
@@ -207,20 +280,35 @@ def run_cli() -> None:
         print(f"Report name: {report_name}")
     print("=" * 55)
 
+    # Load custom prompt if specified
+    system_prompt = None
+    if args.prompt:
+        prompt_path = Path(args.prompt)
+        if prompt_path.is_file():
+            system_prompt = prompt_path.read_text(encoding="utf-8")
+            print(f"📝 Using custom prompt from {args.prompt}")
+        else:
+            print(f"⚠️  Custom prompt file not found: {args.prompt}. Using default.", file=sys.stderr)
+
     try:
         executor = build_agent(
             callbacks=[LiveThoughtHandler()],
             instructions=instructions,
             report_name=report_name,
             max_iterations=max_iter,
+            system_prompt=system_prompt,
         )
 
         result = executor.invoke({"input": task})
         print("\n" + "=" * 55)
         print("Final Answer:")
         print(result["output"])
+        if args.stats:
+            print_stats()
     except Exception as e:
         print(f"\nError: {e}")
+        if args.stats:
+            print_stats()
         sys.exit(1)
 
 

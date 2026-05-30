@@ -38,7 +38,7 @@ def _get_base_prompt():
         return PromptTemplate.from_template(_FALLBACK_PROMPT)
 
 
-def build_agent(callbacks=None, instructions="", report_name="", max_iterations: int = 15) -> AgentExecutor:
+def build_agent(callbacks=None, instructions="", report_name="", max_iterations: int = 15, system_prompt=None) -> AgentExecutor:
     model = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
     try:
         llm = ChatGroq(
@@ -52,7 +52,8 @@ def build_agent(callbacks=None, instructions="", report_name="", max_iterations:
         ) from e
 
     base = _get_base_prompt()
-    combined = SYSTEM_PROMPT + "\n\n" + base.template
+    prompt_text = system_prompt if system_prompt is not None else SYSTEM_PROMPT
+    combined = prompt_text + "\n\n" + base.template
 
     # Prepend depth/behaviour instructions and report name guidance
     extra = ""

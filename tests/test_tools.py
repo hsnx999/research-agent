@@ -31,6 +31,86 @@ class TestWebSearch:
                 f"Expected timeout=15, got timeout={kwargs.get('timeout')}"
             )
 
+    def test_search_cache_hit(self, monkeypatch):
+        """Same query twice: second call returns cached result, Tavily called once."""
+        from src.tools import web_search, _search_cache
+        from unittest.mock import MagicMock
+
+        _search_cache.clear()
+        import src.tools
+
+        fake_time = [100.0]
+        monkeypatch.setattr(src.tools, "time", lambda: fake_time[0])
+        mock_client = MagicMock()
+        mock_client.search.return_value = {"results": []}
+        monkeypatch.setattr(src.tools, "TavilyClient", lambda api_key: mock_client)
+        monkeypatch.setenv("TAVILY_API_KEY", "fake-key")
+
+        result1 = web_search("hit-test")
+        assert result1 == "No results found. Try a different search query."
+        assert mock_client.search.call_count == 1
+
+        result2 = web_search("hit-test")
+        assert result2 == "No results found. Try a different search query."
+        assert mock_client.search.call_count == 1  # cache hit, no extra call
+
+    def test_search_cache_miss_after_ttl(self, monkeypatch):
+        """Expired cache entry is removed and re-fetched (fresh TTL)."""
+        from src.tools import web_search, _search_cache, _search_cache_ttl
+        from unittest.mock import MagicMock
+
+        _search_cache.clear()
+        import src.tools
+
+        fake_time = [100.0]
+        monkeypatch.setattr(src.tools, "time", lambda: fake_time[0])
+        mock_client = MagicMock()
+        mock_client.search.return_value = {"results": []}
+        monkeypatch.setattr(src.tools, "TavilyClient", lambda api_key: mock_client)
+        monkeypatch.setenv("TAVILY_API_KEY", "fake-key")
+
+        # Insert an expired entry
+        _search_cache["ttl-test"] = ("old cached value", fake_time[0] - 1)
+
+        fake_time[0] += 1
+        result = web_search("ttl-test")
+        assert result == "No results found. Try a different search query."
+        # Expired entry removed, new result cached with fresh TTL
+        assert "ttl-test" in _search_cache
+        cached_val, expiry = _search_cache["ttl-test"]
+        assert cached_val == "No results found. Try a different search query."
+        assert expiry == fake_time[0] + _search_cache_ttl
+
+    def test_search_cache_max_eviction(self, monkeypatch):
+        """When cache exceeds max, oldest entry is evicted."""
+        from src.tools import web_search, _search_cache, _search_cache_max
+        from unittest.mock import MagicMock
+
+        _search_cache.clear()
+        import src.tools
+
+        fake_time = [100.0]
+        monkeypatch.setattr(src.tools, "time", lambda: fake_time[0])
+        mock_client = MagicMock()
+        mock_client.search.return_value = {"results": []}
+        monkeypatch.setattr(src.tools, "TavilyClient", lambda api_key: mock_client)
+        monkeypatch.setenv("TAVILY_API_KEY", "fake-key")
+
+        # Fill cache to max (each call increments fake_time for ordering)
+        for i in range(_search_cache_max):
+            web_search(f"query-{i}")
+            fake_time[0] += 1
+
+        assert len(_search_cache) == _search_cache_max
+
+        # Add one more — oldest ("query-0") should be evicted
+        fake_time[0] += 1
+        web_search("new-query")
+
+        assert len(_search_cache) == _search_cache_max
+        assert "new-query" in _search_cache
+        assert "query-0" not in _search_cache  # oldest evicted
+
 
 # ── scrape_page ─────────────────────────────────────────────────────────────
 

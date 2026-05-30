@@ -12,5 +12,6 @@ reports/
 .streamlit/
 
 # OpenCode project config (personal)
+.opencode
 .opencode/
 AGENTS.md

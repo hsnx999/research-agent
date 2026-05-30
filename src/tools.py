@@ -4,6 +4,8 @@ import re
 import requests
 from datetime import datetime
 from pathlib import Path
+from threading import Lock
+from time import time
 from urllib.parse import urlparse
 
 
@@ -11,13 +13,32 @@ from langchain.tools import tool
 from tavily import TavilyClient
 from bs4 import BeautifulSoup
 
+_search_cache = {}
+_search_cache_ttl = 300  # 5 minutes
+_search_cache_max = 50
+_search_cache_lock = Lock()
+
 
 @tool
 def web_search(query: str) -> str:
     """Search the web for current information on any topic.
     Use this when you need recent news, facts, or information
     that may not be in your training data. Returns up to 5
-    results with title, URL and snippet for each."""
+    results with title, URL and snippet for each.
+
+    Results are cached in memory for 5 minutes (TTL) to avoid
+    repeated API calls for the same query. The cache holds up
+    to 50 entries; when full, the oldest entry is evicted."""
+    # Check cache first
+    now = time()
+    with _search_cache_lock:
+        if query in _search_cache:
+            result, expiry = _search_cache[query]
+            if now < expiry:
+                return result
+            del _search_cache[query]
+
+    # Cache miss — perform actual search
     api_key = os.getenv("TAVILY_API_KEY")
     if not api_key:
         return "Search failed: TAVILY_API_KEY is not set. Add it to your .env file."
@@ -32,8 +53,20 @@ def web_search(query: str) -> str:
                 f"Info:  {r['content']}\n"
             )
         if not results:
-            return "No results found. Try a different search query."
-        return "\n---\n".join(results)
+            result_str = "No results found. Try a different search query."
+        else:
+            result_str = "\n---\n".join(results)
+
+        # Store in cache
+        with _search_cache_lock:
+            if len(_search_cache) >= _search_cache_max:
+                oldest = min(
+                    _search_cache.keys(), key=lambda k: _search_cache[k][1]
+                )
+                del _search_cache[oldest]
+            _search_cache[query] = (result_str, now + _search_cache_ttl)
+
+        return result_str
     except Exception as e:
         return f"Search failed: {str(e)}"
 
