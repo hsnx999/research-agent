@@ -12,8 +12,8 @@ REPORTS_DIR = Path(__file__).parent / "reports"
 
 class StreamlitCallbackHandler(BaseCallbackHandler):
     def __init__(self, thought_container):
-        self.container  = thought_container
-        self.thoughts   = []
+        self.container = thought_container
+        self.thoughts = []
 
     def on_agent_action(self, action, **kwargs):
         self.thoughts.append(
@@ -82,7 +82,7 @@ if st.button("Run agent", type="primary", disabled=not task.strip()):
         with st.expander("Agent thought process", expanded=True):
             thought_container = st.empty()
 
-        handler  = StreamlitCallbackHandler(thought_container)
+        handler = StreamlitCallbackHandler(thought_container)
 
         with st.spinner("Agent is working..."):
             try:

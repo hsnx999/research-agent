@@ -22,11 +22,8 @@ class LiveThoughtHandler(BaseCallbackHandler):
 
 def run(task: str) -> str:
     executor = build_agent(callbacks=[LiveThoughtHandler()])
-    try:
-        result = executor.invoke({"input": task})
-        return result["output"]
-    except Exception as e:
-        return f"Agent execution failed: {e}"
+    result = executor.invoke({"input": task})
+    return result["output"]
 
 
 if __name__ == "__main__":

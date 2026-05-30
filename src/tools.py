@@ -48,18 +48,17 @@ def scrape_page(url: str) -> str:
         return f"Could not scrape {url}: invalid URL (must start with http:// or https://)"
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.get(url, headers=headers, timeout=10, stream=True)
-        response.raise_for_status()
+        with requests.get(url, headers=headers, timeout=10, stream=True) as response:
+            response.raise_for_status()
 
-        max_bytes = 5 * 1024 * 1024
-        content_bytes = b""
-        for chunk in response.iter_content(chunk_size=65536, decode_unicode=False):
-            content_bytes += chunk
-            if len(content_bytes) >= max_bytes:
-                content_bytes = content_bytes[:max_bytes]
-                break
+            max_bytes = 5 * 1024 * 1024
+            content_bytes = b""
+            for chunk in response.iter_content(chunk_size=65536, decode_unicode=False):
+                content_bytes += chunk
+                if len(content_bytes) >= max_bytes:
+                    content_bytes = content_bytes[:max_bytes]
+                    break
 
-        response.close()
         text = content_bytes.decode("utf-8", errors="replace")
 
         soup = BeautifulSoup(text, "html.parser")
@@ -71,6 +70,9 @@ def scrape_page(url: str) -> str:
 
         lines = [line.strip() for line in text.splitlines()]
         cleaned = "\n".join(line for line in lines if line)
+
+        if not cleaned:
+            return f"Could not scrape {url}: page has no readable text content"
 
         if len(cleaned) > 3000:
             cleaned = cleaned[:3000]
@@ -122,7 +124,7 @@ def calculate(expression: str) -> str:
         if len(expression) > 200:
             return "Expression too long (max 200 characters)."
 
-        if not re.match(r'^[\d\s\+\-\*\/\.\(\)\%]+$', expression):
+        if not re.match(r'^[\d \+\-\*\/\.\(\)\%]+$', expression):
             return "Invalid expression — only basic arithmetic is supported."
 
         if expression.count("**") > 1:

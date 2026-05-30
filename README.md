@@ -43,10 +43,9 @@ Example run:
 ## Tech stack
 
     Library         Role
-    LangChain       ReAct agent framework and tool orchestration
+    LangChain       ReAct agent framework, tool orchestration, and prompt hub
     Groq            LLaMA 3.3 70B inference — fast and free
     Tavily          Web search API designed for AI agents
-    LangChain Hub   ReAct prompt template hosting
     BeautifulSoup   HTML parsing and content extraction
     Streamlit       Live UI showing agent thought process
 
