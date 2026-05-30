@@ -54,6 +54,20 @@ The CLI is built with `argparse` and supports the following flags:
 
 ---
 
+## Features
+
+- **Web search cache** — Repeated queries return instantly (5 min TTL, 50 entry LRU)
+- **Concurrent scraping** — `scrape_pages` fetches up to 3 URLs in parallel
+- **SSRF protection** — Scraper blocks private, loopback, and link-local IPs
+- **Rate-limit retry** — Automatic exponential backoff (10s → 20s → 30s) on 429 errors
+- **Tool call stats** — `--stats` flag shows per-tool usage after each run
+- **Report search** — `--search <keyword>` greps all saved reports (case-insensitive)
+- **Custom prompts** — `--prompt <file>` overrides the system prompt
+- **Quick / Deep modes** — `--quick` (10 iter) for fast answers, `--deep` (30 iter) for thorough research
+- **Interactive REPL** — `-i` mode with conversation history (last 5 turns)
+
+---
+
 ## Tech stack
 
     Library         Role
@@ -61,7 +75,23 @@ The CLI is built with `argparse` and supports the following flags:
     Groq            LLaMA 3.3 70B inference — fast and free
     Tavily          Web search API designed for AI agents
     BeautifulSoup   HTML parsing and content extraction
+    lxml            Fast HTML/XML parser (2-3x vs html.parser)
     Streamlit       Live UI showing agent thought process
+    pytest          Test suite (75+ tests)
+
+---
+
+## Configuration
+
+Create a `.env` file in the project root (or copy `.env.example`):
+
+    cp .env.example .env
+
+| Variable         | Required | Default                     | Description                |
+|------------------|----------|-----------------------------|----------------------------|
+| GROQ_API_KEY     | Yes      | —                           | Groq API key               |
+| TAVILY_API_KEY   | Yes      | —                           | Tavily search API key      |
+| MODEL_NAME       | No       | llama-3.3-70b-versatile     | Groq model to use          |
 
 ---
 
@@ -77,8 +107,8 @@ Prerequisites: Python 3.12+, free API keys from groq.com and tavily.com
 
 Create a .env file:
 
-    GROQ_API_KEY=your_groq_key
-    TAVILY_API_KEY=your_tavily_key
+    cp .env.example .env
+    # then edit .env with your API keys
 
 Run the terminal agent:
 
@@ -99,19 +129,47 @@ Run the Streamlit UI:
 
 ---
 
+## Run with Docker
+
+    docker compose up cli              # terminal agent
+    docker compose up ui               # Streamlit UI
+
+Or with Podman:
+
+    podman-compose up cli
+    podman-compose up ui
+
+---
+
+## Run tests
+
+    source .venv/bin/activate
+    pytest -v
+
+---
+
 ## Project structure
 
     research-agent/
     ├── agent.py               Terminal entry point with live thought printing
     ├── app.py                 Streamlit UI with streaming thought process
+    ├── Dockerfile             Container image (python:3.12-slim)
+    ├── docker-compose.yml     Multi-service orchestration (cli + ui)
+    ├── .dockerignore          Docker build ignore rules
+    ├── .env.example           Template for required API keys
+    ├── pyproject.toml         Project metadata, pytest config, CLI entry stub
+    ├── requirements.txt       Python dependencies
     ├── src/
     │   ├── __init__.py        Package init
     │   ├── agent_builder.py   Shared agent builder (LLM, prompt, executor)
     │   ├── tools.py           All agent tools — search, scrape, save, calculate
     │   └── prompts.py         Agent system prompt and behaviour rules
     ├── reports/               Saved research reports (git-ignored)
-    └── requirements.txt
+    └── tests/
+        ├── conftest.py        Shared fixtures and test configuration
+        ├── test_agent.py      CLI, validation, callbacks, stats, retry tests
+        ├── test_app.py        Streamlit UI tests
+        └── test_tools.py      Tool unit tests (75+ total)
 
 ---
-
 
