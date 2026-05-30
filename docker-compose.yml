@@ -1,0 +1,22 @@
+services:
+  cli:
+    build: .
+    container_name: research-agent-cli
+    env_file:
+      - .env
+    volumes:
+      - ./reports:/app/reports
+    stdin_open: true
+    tty: true
+    command: python agent.py
+
+  ui:
+    build: .
+    container_name: research-agent-ui
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    volumes:
+      - ./reports:/app/reports
+    command: streamlit run app.py --server.address=0.0.0.0
