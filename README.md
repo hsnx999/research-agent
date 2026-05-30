@@ -29,21 +29,26 @@ Example run:
     Action:  save_report("# Open Source LLMs...")
     Final Answer: Here are the key findings...
 
-The CLI is built with `argparse` and supports five modes:
+The CLI is built with `argparse` and supports the following flags:
 
-    python agent.py                    # run the default research task
-    python agent.py "your query"       # run a custom research task
-    python agent.py --list-reports     # list all saved markdown reports
-    python agent.py --stats "your query"  # show tool call statistics
-    python agent.py --search <keyword>     # search report contents
-    python agent.py --prompt <file> "query" # use a custom prompt file
+    python agent.py                          # run the default research task
+    python agent.py "your query"             # run a custom research task
+    python agent.py --quick "query"          # quick mode (10 iterations max)
+    python agent.py --deep "query"           # deep mode (30 iterations max)
+    python agent.py --name "Title" "query"   # custom report name
+    python agent.py --list-reports           # list saved reports
+    python agent.py --stats "query"          # show tool call statistics
+    python agent.py --search <keyword>       # search report contents
+    python agent.py --prompt <file> "query"  # use a custom prompt file
+    python agent.py -i                       # interactive REPL mode
 
 ---
 
 ## Tools
 
-    web_search     Search the web via Tavily API
-    scrape_page    Fetch and clean full page content from a URL
+    web_search     Search the web via Tavily API (cached 5 min, 50 entries)
+    scrape_pages   Fetch multiple pages concurrently (comma-separated, up to 3)
+    scrape_page    Fetch and clean full page content from a single URL
     save_report    Persist findings as a markdown file in reports/
     calculate      Evaluate mathematical expressions safely
 
@@ -79,10 +84,14 @@ Run the terminal agent:
 
     python agent.py                          # default task
     python agent.py "your research query"    # custom task
+    python agent.py --quick "query"          # quick mode (10 iterations)
+    python agent.py --deep "query"           # deep mode (30 iterations)
+    python agent.py --name "Title" "query"   # custom report name
     python agent.py --list-reports           # list saved reports
-    python agent.py --stats "your query"     # show tool call statistics
+    python agent.py --stats "query"          # show tool call statistics
     python agent.py --search <keyword>       # search report contents
     python agent.py --prompt <file> "query"  # use a custom prompt file
+    python agent.py -i                       # interactive REPL mode
 
 Run the Streamlit UI:
 
@@ -105,10 +114,4 @@ Run the Streamlit UI:
 
 ---
 
-## What I learned building this
 
-- How ReAct agents work — the Thought/Action/Observation loop
-- Why tool docstrings matter — the LLM reads them to decide which tool to use
-- How to implement custom LangChain callbacks to stream agent reasoning
-- Why smaller models struggle with strict output formats
-- How to build autonomous multi-step workflows without hardcoded sequences
