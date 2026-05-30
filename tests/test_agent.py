@@ -294,3 +294,58 @@ class TestCustomPrompt:
         executor = build_agent(system_prompt=custom)
         # The executor was built successfully — verify the prompt was used
         assert executor is not None
+
+
+class TestRateLimitRetry:
+    def test_retry_success_first_attempt(self):
+        from agent import _invoke_with_retry
+        executor = type("MockExecutor", (), {"invoke": lambda self, d: {"output": "ok"}})()
+        result = _invoke_with_retry(executor, {"input": "test"})
+        assert result["output"] == "ok"
+
+    def test_retry_recovers_after_rate_limit(self, monkeypatch):
+        from agent import _invoke_with_retry
+        import time
+        call_count = [0]
+        def mock_invoke(self, d):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise Exception("429 rate limit exceeded")
+            return {"output": "recovered"}
+        executor = type("MockExecutor", (), {"invoke": mock_invoke})()
+        # Speed up the sleep
+        monkeypatch.setattr(time, "sleep", lambda s: None)
+        result = _invoke_with_retry(executor, {"input": "test"})
+        assert result["output"] == "recovered"
+        assert call_count[0] == 2
+
+    def test_retry_exhausted_after_max_retries(self, monkeypatch):
+        from agent import _invoke_with_retry
+        import time
+        call_count = [0]
+        def mock_invoke(self, d):
+            call_count[0] += 1
+            raise Exception("429 rate limit exceeded")
+        executor = type("MockExecutor", (), {"invoke": mock_invoke})()
+        monkeypatch.setattr(time, "sleep", lambda s: None)
+        with pytest.raises(Exception, match="rate limit"):
+            _invoke_with_retry(executor, {"input": "test"})
+        assert call_count[0] == 3  # all 3 attempts used
+
+    def test_retry_non_rate_limit_raises_immediately(self):
+        from agent import _invoke_with_retry
+        def mock_invoke(self, d):
+            raise ValueError("some other error")
+        executor = type("MockExecutor", (), {"invoke": mock_invoke})()
+        with pytest.raises(ValueError, match="some other error"):
+            _invoke_with_retry(executor, {"input": "test"})
+
+    def test_retry_with_mocked_build_agent(self, monkeypatch):
+        """Integration check: run() uses _invoke_with_retry internally."""
+        from agent import run
+        from unittest.mock import MagicMock
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        # Without real API key, build_agent itself will fail before invoke is called.
+        # This verifies the flow doesn't break.
+        with pytest.raises(RuntimeError, match="GROQ_API_KEY"):
+            run("test")

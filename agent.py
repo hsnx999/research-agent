@@ -76,7 +76,7 @@ def run(task: str, instructions="", report_name="", max_iterations=15, system_pr
             max_iterations=max_iterations,
             system_prompt=system_prompt,
         )
-        result = executor.invoke({"input": stripped})
+        result = _invoke_with_retry(executor, {"input": stripped})
         return result["output"]
     finally:
         stop_event.set()
@@ -150,6 +150,23 @@ def search_reports(keyword: str) -> None:
         print(f"  {name}:{lineno}: {display}")
     unique_files = len(set(m[0] for m in matches))
     print(f"\n{len(matches)} match(es) in {unique_files} file(s)")
+
+
+def _invoke_with_retry(executor, input_data, max_retries=3):
+    """Invoke executor with exponential backoff on rate limit errors."""
+    import time
+    for attempt in range(max_retries):
+        try:
+            return executor.invoke(input_data)
+        except Exception as e:
+            if "rate limit" in str(e).lower() or "429" in str(e):
+                if attempt < max_retries - 1:
+                    wait = min(2 ** attempt * 10, 30)
+                    print(f"\n⏳ Rate limited. Retrying in {wait}s...")
+                    time.sleep(wait)
+                    continue
+            raise
+    raise RuntimeError("Max retries exceeded")
 
 
 def run_interactive():
@@ -299,7 +316,7 @@ def run_cli() -> None:
             system_prompt=system_prompt,
         )
 
-        result = executor.invoke({"input": task})
+        result = _invoke_with_retry(executor, {"input": task})
         print("\n" + "=" * 55)
         print("Final Answer:")
         print(result["output"])

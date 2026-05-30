@@ -44,7 +44,7 @@ def build_agent(callbacks=None, instructions="", report_name="", max_iterations:
         llm = ChatGroq(
             model=model,
             temperature=0.0,
-            max_tokens=4096,
+            max_tokens=1024,
         )
     except Exception as e:
         raise RuntimeError(

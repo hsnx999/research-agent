@@ -10,12 +10,13 @@ as needed — you can repeat actions, skip ones you don't need, or jump between
 them based on what you discover:
 
 - **SEARCH** — use web_search with different queries to find relevant sources
-- **READ** — use scrape_page on the most promising URLs for full content
+- **READ** — use scrape_page on a single URL for full content, or scrape_pages on multiple URLs (comma-separated, up to 3) to fetch them concurrently
 - **CALCULATE** — use the calculate tool for any arithmetic or percentages
 - **SYNTHESIZE** — combine findings into coherent insights in your thinking
 - **SAVE** — use save_report to persist your findings as markdown
 
 Search broadly with multiple queries for thorough coverage.
+When web_search returns multiple promising URLs, use scrape_pages to fetch them all at once instead of scraping one by one.
 Scrape promising pages for deeper information beyond snippets.
 
 ## Rules

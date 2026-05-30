@@ -143,6 +143,30 @@ class TestScrapePage:
         result = scrape_page("http://169.254.1.1/config")
         assert "private" in result.lower() or "internal" in result.lower()
 
+    def test_scrape_page_truncates_at_1500(self, monkeypatch):
+        """Scrape output should be limited to ~1500 characters."""
+        from unittest.mock import MagicMock
+        from src.tools import scrape_page
+
+        # Mock requests.get to return a response with long content
+        mock_resp = MagicMock()
+        mock_resp.headers = {"Content-Type": "text/html"}
+        mock_resp.__enter__.return_value = mock_resp
+        mock_resp.iter_content.return_value = [b"<p>test</p>"]
+        monkeypatch.setattr("src.tools.requests.get", lambda *a, **kw: mock_resp)
+
+        # Mock BeautifulSoup to return long text content
+        long_text = "word " * 800  # ~4000 chars
+        mock_soup = MagicMock()
+        mock_soup.get_text.return_value = long_text
+        mock_soup.__getitem__.return_value = []
+        monkeypatch.setattr("src.tools.BeautifulSoup", lambda t, p: mock_soup)
+
+        result = scrape_page("https://example.com")
+        assert len(result) <= 1600, f"Expected <= 1600 chars, got {len(result)}"
+        assert "truncated" in result.lower(), "Truncation marker missing"
+        assert len(result) < 3000, "Output exceeded old 3000-char limit"
+
 
 # ── save_report ─────────────────────────────────────────────────────────────
 
@@ -195,6 +219,63 @@ class TestSaveReport:
         """Without a name, the filename starts with report_<timestamp>."""
         result = save_report("# Test")
         assert result.startswith("Report saved to reports/report_2")
+
+
+# ── scrape_pages ──────────────────────────────────────────────────────────────
+
+class TestScrapePages:
+    """Tests for the concurrent scrape_pages tool."""
+
+    def test_scrape_pages_empty_input(self):
+        """Empty input should return an error message."""
+        from src.tools import scrape_pages
+        result = scrape_pages("")
+        assert "No valid URLs" in result
+
+    def test_scrape_pages_single_url(self, monkeypatch):
+        """A single valid URL should be scraped successfully."""
+        from src.tools import scrape_pages
+        monkeypatch.setattr("src.tools.scrape_page", lambda url: f"Content for {url}")
+        result = scrape_pages("https://example.com")
+        assert "https://example.com" in result
+        assert "Content" in result
+
+    def test_scrape_pages_max_three_urls(self, monkeypatch):
+        """At most 3 URLs should be processed; extras are ignored."""
+        from src.tools import scrape_pages
+        scraped = []
+
+        def mock_scrape(url):
+            scraped.append(url)
+            return f"Content for {url}"
+
+        monkeypatch.setattr("src.tools.scrape_page", mock_scrape)
+        urls = "https://a.com, https://b.com, https://c.com, https://d.com"
+        result = scrape_pages(urls)
+        assert len(scraped) == 3
+        assert "https://d.com" not in result
+
+    def test_scrape_pages_some_fail(self, monkeypatch):
+        """If one URL fails, others should still be returned."""
+        from src.tools import scrape_pages
+        call_count = [0]
+
+        def mock_scrape(url):
+            call_count[0] += 1
+            if call_count[0] == 2:
+                raise Exception("boom")
+            return f"Content for {url}"
+
+        monkeypatch.setattr("src.tools.scrape_page", mock_scrape)
+        result = scrape_pages("https://a.com, https://b.com")
+        assert "https://a.com" in result
+        assert "Error" in result
+
+    def test_scrape_pages_in_tools_list(self):
+        """scrape_pages must be registered in TOOLS list."""
+        from src.tools import TOOLS
+        names = [t.name for t in TOOLS]
+        assert "scrape_pages" in names
 
 
 # ── calculate ───────────────────────────────────────────────────────────────

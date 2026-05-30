@@ -4,6 +4,7 @@ import re
 import requests
 from datetime import datetime
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 from time import time
 from urllib.parse import urlparse
@@ -75,7 +76,7 @@ def web_search(query: str) -> str:
 def scrape_page(url: str) -> str:
     """Fetch and read the full text content of a web page.
     Use this after web_search to get complete information from
-    a specific URL. Returns clean readable text up to 3000
+    a specific URL. Returns clean readable text up to 1500
     characters. Has a 10-second timeout and caps downloads at
     5 MB. Do not use on URLs that require login."""
     parsed = urlparse(url)
@@ -114,7 +115,7 @@ def scrape_page(url: str) -> str:
             charset = content_type.split("charset=")[-1].split(";")[0].strip()
         text = content_bytes.decode(charset, errors="replace")
 
-        soup = BeautifulSoup(text, "html.parser")
+        soup = BeautifulSoup(text, "lxml")
 
         for tag in soup(["script", "style", "nav", "footer", "header"]):
             tag.decompose()
@@ -127,12 +128,12 @@ def scrape_page(url: str) -> str:
         if not cleaned:
             return f"Could not scrape {url}: page has no readable text content"
 
-        if len(cleaned) > 3000:
-            cleaned = cleaned[:3000]
+        if len(cleaned) > 1500:
+            cleaned = cleaned[:1500]
             last_space = cleaned.rfind(" ")
-            if last_space > 2000:
+            if last_space > 1000:
                 cleaned = cleaned[:last_space]
-            cleaned += "\n\n[Content truncated to 3000 chars]"
+            cleaned += "\n\n[Content truncated to 1500 chars]"
 
         return cleaned
     except requests.exceptions.Timeout:
@@ -143,6 +144,34 @@ def scrape_page(url: str) -> str:
         return f"Could not scrape {url}: HTTP {e.response.status_code}"
     except Exception as e:
         return f"Could not scrape {url}: {str(e)}"
+
+
+@tool
+def scrape_pages(urls: str) -> str:
+    """Fetch multiple web pages at the same time for faster research.
+    Pass URLs as a comma-separated list (up to 3 URLs).
+    Use this when you have multiple URLs from a search and want
+    to read them all at once. Each page is capped at 1000 characters.
+
+    Example: 'https://example.com/page1, https://example.com/page2'
+    Returns combined content from all successfully scraped pages."""
+    url_list = [u.strip() for u in urls.split(",") if u.strip()][:3]
+    if not url_list:
+        return "No valid URLs provided. Pass comma-separated URLs."
+
+    def _scrape_single(url: str) -> tuple[str, str]:
+        try:
+            result = scrape_page(url)
+            return (url, result)
+        except Exception as e:
+            return (url, f"Error: {e}")
+
+    results = []
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        for url, result in executor.map(_scrape_single, url_list):
+            results.append(f"=== {url} ===\n{result[:1000]}")
+
+    return "\n\n".join(results)
 
 
 @tool
@@ -199,4 +228,4 @@ def calculate(expression: str) -> str:
         return f"Calculation failed: {str(e)}"
 
 
-TOOLS = [web_search, scrape_page, save_report, calculate]
+TOOLS = [web_search, scrape_pages, scrape_page, save_report, calculate]
