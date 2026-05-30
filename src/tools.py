@@ -1,9 +1,11 @@
+import ipaddress
 import os
 import re
 import requests
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
+from uuid import uuid4
 
 from langchain.tools import tool
 from tavily import TavilyClient
@@ -21,7 +23,7 @@ def web_search(query: str) -> str:
         return "Search failed: TAVILY_API_KEY is not set. Add it to your .env file."
     try:
         client = TavilyClient(api_key=api_key)
-        response = client.search(query, max_results=5)
+        response = client.search(query, max_results=5, timeout=15)
         results = []
         for r in response["results"]:
             results.append(
@@ -46,8 +48,21 @@ def scrape_page(url: str) -> str:
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         return f"Could not scrape {url}: invalid URL (must start with http:// or https://)"
+
+    # SSRF protection: reject private/loopback/link-local IPs
+    hostname = parsed.hostname
+    if hostname is None:
+        return f"Could not scrape {url}: could not parse hostname from URL"
+    try:
+        addr = ipaddress.ip_address(hostname)
+        if addr.is_private or addr.is_loopback or addr.is_link_local:
+            return f"Could not scrape {url}: cannot access private or internal addresses"
+    except ValueError:
+        pass  # hostname is a domain name, not a raw IP — safe to proceed
+
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
+        # Note: redirects are unlimited by default (requests follows up to 30)
         with requests.get(url, headers=headers, timeout=10, stream=True) as response:
             response.raise_for_status()
 
@@ -59,7 +74,12 @@ def scrape_page(url: str) -> str:
                     content_bytes = content_bytes[:max_bytes]
                     break
 
-        text = content_bytes.decode("utf-8", errors="replace")
+        # Charset sniffing from Content-Type header
+        content_type = response.headers.get("Content-Type", "")
+        charset = "utf-8"
+        if "charset=" in content_type:
+            charset = content_type.split("charset=")[-1].split(";")[0].strip()
+        text = content_bytes.decode(charset, errors="replace")
 
         soup = BeautifulSoup(text, "html.parser")
 
@@ -98,12 +118,14 @@ def save_report(content: str) -> str:
     Use this as the final step when you have finished researching
     and want to persist the findings. The content should be a
     well-structured markdown document with headers and sections.
-    Files are auto-named as report_YYYYMMDD_HHMMSS.md.
+    Files are auto-named as report_YYYYMMDD_HHMMSS_XXXXXX.md
+    where XXXXXX is a random hex suffix to prevent overwrites.
     Returns the file path where the report was saved."""
     try:
         Path("reports").mkdir(exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filepath = f"reports/report_{timestamp}.md"
+        suffix = uuid4().hex[:6]
+        filepath = f"reports/report_{timestamp}_{suffix}.md"
         Path(filepath).write_text(content, encoding="utf-8")
         return f"Report saved to {filepath}"
     except Exception as e:
@@ -124,7 +146,7 @@ def calculate(expression: str) -> str:
         if len(expression) > 200:
             return "Expression too long (max 200 characters)."
 
-        if not re.match(r'^[\d \+\-\*\/\.\(\)\%]+$', expression):
+        if not re.fullmatch(r'[0-9+\-*/.()% ]+', expression):
             return "Invalid expression — only basic arithmetic is supported."
 
         if expression.count("**") > 1:

@@ -1,6 +1,7 @@
 """Baseline tests for every tool defined in src.tools."""
 
 from pathlib import Path
+from unittest.mock import patch
 
 from src.tools import calculate, save_report, scrape_page, web_search
 
@@ -19,6 +20,17 @@ class TestWebSearch:
             "Add it to your .env file."
         )
 
+    def test_web_search_timeout_passed(self):
+        """Verify that timeout=15 is passed to the Tavily client."""
+        with patch("src.tools.TavilyClient") as MockClient:
+            mock_instance = MockClient.return_value
+            mock_instance.search.return_value = {"results": []}
+            web_search("anything")
+            _, kwargs = mock_instance.search.call_args
+            assert kwargs.get("timeout") == 15, (
+                f"Expected timeout=15, got timeout={kwargs.get('timeout')}"
+            )
+
 
 # ── scrape_page ─────────────────────────────────────────────────────────────
 
@@ -35,6 +47,21 @@ class TestScrapePage:
         """FTP URLs should also be rejected."""
         result = scrape_page("ftp://files.example.com/doc.txt")
         assert "invalid URL" in result
+
+    def test_scrape_page_private_ip(self):
+        """Private IPv4 addresses must be blocked (SSRF protection)."""
+        result = scrape_page("http://127.0.0.1/admin")
+        assert "private" in result.lower() or "internal" in result.lower()
+
+    def test_scrape_page_loopback_ipv6(self):
+        """IPv6 loopback must also be blocked (SSRF protection)."""
+        result = scrape_page("http://[::1]/")
+        assert "private" in result.lower() or "internal" in result.lower()
+
+    def test_scrape_page_link_local_ip(self):
+        """Link-local address 169.254.1.1 must be blocked."""
+        result = scrape_page("http://169.254.1.1/config")
+        assert "private" in result.lower() or "internal" in result.lower()
 
 
 # ── save_report ─────────────────────────────────────────────────────────────
@@ -61,6 +88,17 @@ class TestSaveReport:
         filepath = result.replace("Report saved to ", "")
         assert Path(filepath).exists()
         assert Path(filepath).read_text(encoding="utf-8") == ""
+
+    def test_save_report_unique_filenames(self, tmp_reports_dir):
+        """Two saves in the same second must produce different filenames."""
+        path1 = save_report("content1")
+        path2 = save_report("content2")
+        assert path1 != path2, f"Filenames must differ, got {path1!r} and {path2!r}"
+        # Verify both files actually exist with the right content
+        file1 = path1.replace("Report saved to ", "")
+        file2 = path2.replace("Report saved to ", "")
+        assert Path(file1).read_text(encoding="utf-8") == "content1"
+        assert Path(file2).read_text(encoding="utf-8") == "content2"
 
 
 # ── calculate ───────────────────────────────────────────────────────────────
@@ -122,4 +160,17 @@ class TestCalculate:
     def test_calculate_expression_with_letters(self):
         """Letters anywhere in the expression should be rejected."""
         result = calculate("2a+2")
+        assert "Invalid expression" in result
+
+    def test_calculate_unicode_digit_rejected(self):
+        """Unicode digits (e.g. Arabic-Indic) must be rejected by the regex."""
+        result = calculate("١٢٣")  # Arabic-Indic digits
+        assert "Invalid expression" in result or "not allowed" in result.lower()
+
+    def test_calculate_trailing_newline(self):
+        """A trailing newline should still work (the regex can match the digits)."""
+        result = calculate("2+2\n")
+        # The newline character is not in the allowed character set,
+        # so it should either be rejected gracefully or stripped.
+        # With re.fullmatch, "\n" does not match, so expect rejection.
         assert "Invalid expression" in result
