@@ -1,4 +1,8 @@
+import argparse
 import sys
+from datetime import datetime
+from pathlib import Path
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -40,8 +44,51 @@ def run(task: str) -> str:
     return result["output"]
 
 
-if __name__ == "__main__":
-    task = "Search for the latest developments in AI agents and summarize the top 3 findings. Save a report of your findings."
+def list_reports() -> None:
+    """List all markdown reports in the reports/ directory."""
+    reports_dir = Path("reports")
+    if not reports_dir.is_dir():
+        print("No reports directory found.")
+        return
+
+    files = list(reports_dir.glob("*.md"))
+    if not files:
+        print("No reports found.")
+        return
+
+    files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+
+    header = f"{'Name':<50} {'Size':>8} {'Date':<20}"
+    print(header)
+    print("-" * len(header))
+    for f in files:
+        stat = f.stat()
+        size = stat.st_size
+        mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
+        print(f"{f.name:<50} {size:>8} {mtime:<20}")
+    print(f"\nTotal: {len(files)} report(s)")
+
+
+def run_cli() -> None:
+    parser = argparse.ArgumentParser(description="Research Agent")
+    parser.add_argument(
+        "task",
+        nargs="?",
+        default=None,
+        help="Research task to execute",
+    )
+    parser.add_argument(
+        "--list-reports",
+        action="store_true",
+        help="List all saved reports",
+    )
+    args = parser.parse_args()
+
+    if args.list_reports:
+        list_reports()
+        return
+
+    task = args.task or "Search for the latest developments in AI agents and summarize the top 3 findings. Save a report of your findings."
     print(f"Task: {task}\n")
     print("=" * 55)
     try:
@@ -52,3 +99,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\nError: {e}")
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    run_cli()

@@ -1,6 +1,8 @@
-"""Tests for input validation and callback safety."""
+"""Tests for input validation, callback safety, and CLI."""
+from pathlib import Path
+
 import pytest
-from agent import run, LiveThoughtHandler
+from agent import run, LiveThoughtHandler, list_reports
 
 
 class TestInputValidation:
@@ -41,3 +43,23 @@ class TestCallbackSafety:
         handler.on_agent_finish(None)  # No operations on finish, no crash
         captured = capsys.readouterr()
         assert "Agent finished" in captured.out
+
+
+class TestCLI:
+    def test_list_reports_no_directory(self, capsys, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        Path(tmp_path / "reports").mkdir()
+        list_reports()
+        captured = capsys.readouterr()
+        assert "No reports found" in captured.out
+
+    def test_list_reports_with_file(self, capsys, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        reports_dir = Path(tmp_path / "reports")
+        reports_dir.mkdir()
+        report_file = reports_dir / "test_report.md"
+        report_file.write_text("# Test Report\n\nSome content.")
+        list_reports()
+        captured = capsys.readouterr()
+        assert "test_report.md" in captured.out
+        assert "Total:" in captured.out
